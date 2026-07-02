@@ -1,0 +1,4 @@
+interface:
+  display_name: "WorldArena Eval"
+  short_description: "Run WorldArena evaluation pipelines"
+  default_prompt: "Use $worldarena-eval to preflight inputs and run the WorldArena evaluation pipeline."
