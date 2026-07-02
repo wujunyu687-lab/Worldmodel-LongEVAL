@@ -1,5 +1,3 @@
-# Worldmodel-LongEVAL
-
 Utilities for long-horizon world-model evaluation workflows.
 
 ## Codex Skill: `worldarena-eval`
