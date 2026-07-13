@@ -1,11 +1,11 @@
 ---
 name: worldarena-eval
-description: Operate the WorldArena evaluation pipeline for local /mnt/cfs/e71s16/wjy/WorldArena-style checkouts. Use when Codex needs to run or prepare Track 1 video-quality evaluation, VLM judge evaluation, JEPA/JEDi evaluation, action_following preprocessing/evaluation, CSV aggregation, input preflight checks for generated videos and summary.json, config/conda/path diagnostics, or result collection from WorldArena outputs.
+description: Autonomously bootstrap and operate the WorldArena evaluation pipeline for local checkouts. Use when Codex should ask for missing evaluation inputs, create or repair required conda environments, download metric-specific checkpoints to a user-selected directory, generate a working config, run Track 1 standard/VLM/JEPA/action-following evaluations, monitor outputs, aggregate CSV results, and explain failures or metrics.
 ---
 
 # WorldArena Eval
 
-Use this skill to drive the WorldArena pipeline end to end. Prefer real preflight and concrete commands over generic advice. Always inspect the target checkout because local scripts and paths may be patched.
+Use this skill to take ownership of WorldArena evaluation end to end. Do not stop at a command plan when the user asks to evaluate. Gather missing inputs once, bootstrap dependencies, execute the pipeline, monitor it, and report real artifacts.
 
 ## Default Repo
 
@@ -17,31 +17,41 @@ Default path if the user does not provide one:
 
 Verify the path exists before relying on it. If the user gives another path, use that path.
 
-## Quick Workflow
+## Autonomous Workflow
 
-1. Locate the repo and run pipeline preflight:
+1. Run intake immediately:
 
 ```bash
-python ~/.codex/skills/worldarena-eval/scripts/worldarena_pipeline.py preflight \
-  --repo /mnt/cfs/e71s16/wjy/WorldArena \
-  --video-dir /path/to/generated_videos \
-  --summary-json /path/to/summary.json
+python ~/.codex/skills/worldarena-eval/scripts/worldarena_auto.py intake \
+  --repo /mnt/cfs/e71s16/wjy/WorldArena
 ```
 
-2. Generate the command plan:
+2. Ask one concise question containing only unresolved fields. Usually these are:
+
+- generated video directory
+- `summary.json`
+- metrics or profile (`core`, `full`, or a metric list)
+- checkpoint download directory; recommend `<repo>/models`
+- Hugging Face token only if a gated download actually rejects anonymous access
+
+Infer `model_name` from the generated-video directory unless the user specifies one. Do not repeatedly ask for values already discoverable from disk.
+
+3. After the user answers, run the autonomous pipeline:
 
 ```bash
-python ~/.codex/skills/worldarena-eval/scripts/worldarena_pipeline.py plan \
+python ~/.codex/skills/worldarena-eval/scripts/worldarena_auto.py auto \
   --repo /mnt/cfs/e71s16/wjy/WorldArena \
   --model-name my_model \
   --video-dir /path/to/generated_videos \
   --summary-json /path/to/summary.json \
-  --metrics "image_quality,subject_consistency,action_following,vlm,jepa"
+  --metrics core \
+  --weights-dir /path/to/worldarena_weights \
+  --execute
 ```
 
-3. If the user asks to run it, execute the plan commands from `video_quality/` and monitor output artifacts.
+4. Monitor long installs, downloads, preprocessing, and evaluation until they finish or reach a concrete blocker. Preserve existing environments and downloaded files; resume rather than restart.
 
-4. Separate validation boundaries in every report:
+5. Separate validation boundaries in every report:
 
 - format/preprocess success
 - model/environment import success
@@ -50,6 +60,19 @@ python ~/.codex/skills/worldarena-eval/scripts/worldarena_pipeline.py plan \
 - actual quality or task-success claim
 
 ## Common Tasks
+
+### Bootstrap Automatically
+
+Read `references/bootstrap.md` before environment or weight installation. Use `worldarena_auto.py setup --execute` when setup is requested separately from evaluation.
+
+The setup must:
+
+- create only the conda environments required by selected metric families
+- reuse existing environments and weights
+- download only checkpoints required by selected metrics
+- write `video_quality/config/config.autogen.yaml`, leaving the repository template untouched
+- smoke-test imports after installation
+- ask for `HF_TOKEN` only after an authenticated download is proven necessary
 
 ### Run Track 1 Pipeline
 
@@ -60,7 +83,7 @@ Treat metrics as four families:
 - `vlm`: `Interaction Quality`, `Perspectivity`, `Instruction Following`, handled by `run_VLM_judge.sh`.
 - `jepa`: handled by `run_evaluation_JEPA.sh`.
 
-Use `worldarena_pipeline.py plan` to split mixed metric lists into the right commands. Read `references/pipeline.md` when changing or debugging the execution sequence.
+Use `worldarena_auto.py auto --execute` for the normal path. Use `worldarena_pipeline.py plan` only for debugging or when the user explicitly asks for commands without execution. Read `references/pipeline.md` when changing or diagnosing the sequence.
 
 Before actual execution, verify:
 
@@ -72,7 +95,7 @@ Before actual execution, verify:
 
 ### Execute Commands
 
-When the user asks to run evaluation, run commands from the target repo, usually:
+When the user asks to run evaluation, execute it. Do not hand back commands as the final result. The autonomous runner uses the repository scripts for standard, action-following, and VLM metrics, and directly invokes JEDi to avoid the checkout's placeholder GT path.
 
 ```bash
 cd /mnt/cfs/e71s16/wjy/WorldArena/video_quality
@@ -115,5 +138,6 @@ Known in this checkout:
 
 ## References
 
+- Read `references/bootstrap.md` before intake, environment setup, checkpoint download, generated config creation, or autonomous execution.
 - Read `references/pipeline.md` when the user wants to use the pipeline, run evaluation, prepare commands, fix input/config, or collect outputs.
 - Read `references/metrics.md` when the user asks what metrics mean, which metric maps to long-term consistency/stability, or whether FID/FVD is missing.
